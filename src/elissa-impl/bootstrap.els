@@ -1,0 +1,53 @@
+namespace GenericsBenchmark\ElissaImpl;
+
+use Esl\Autoload;
+use Esl\Symbol;
+
+Autoload\register(
+    new Autoload\Autoloader()
+        ->withSymbolFiles(dict[
+            'GenericsBenchmark\\ElissaImpl\\Box' => directory!() . '/Box.els',
+            'GenericsBenchmark\\ElissaImpl\\Container' => directory!() . '/Box.els',
+            'GenericsBenchmark\\ElissaImpl\\Cell' => directory!() . '/Cell.els',
+            'GenericsBenchmark\\ElissaImpl\\Pair' => directory!() . '/Pair.els',
+            'GenericsBenchmark\\ElissaImpl\\Triple' => directory!() . '/Triple.els',
+            'GenericsBenchmark\\ElissaImpl\\Projector' => directory!() . '/Projector.els',
+            'GenericsBenchmark\\ElissaImpl\\IntProjector' => directory!() . '/Projector.els',
+            'GenericsBenchmark\\ElissaImpl\\Doubler' => directory!() . '/Projector.els',
+            'GenericsBenchmark\\ElissaImpl\\Scorer' => directory!() . '/Scorer.els',
+            'GenericsBenchmark\\ElissaImpl\\Weight' => directory!() . '/Scorer.els',
+            'GenericsBenchmark\\ElissaImpl\\Scored' => directory!() . '/Scorer.els',
+            'GenericsBenchmark\\ElissaImpl\\Registry' => directory!() . '/Ops.els',
+            'GenericsBenchmark\\ElissaImpl\\Cells' => directory!() . '/Ops.els',
+            'GenericsBenchmark\\ElissaImpl\\Runner' => directory!() . '/Ops.els',
+        ]),
+);
+
+// working around a bug in the elissa autoloader :c still haven't figured it out lol
+Symbol\exists('GenericsBenchmark\\ElissaImpl\\Box');
+Symbol\exists('GenericsBenchmark\\ElissaImpl\\Container');
+Symbol\exists('GenericsBenchmark\\ElissaImpl\\Projector');
+Symbol\exists('GenericsBenchmark\\ElissaImpl\\Scorer');
+
+function statics(int $int, int $string): string {
+    if (2 == $int && 1 == $string) {
+        return 'per-specialization';
+    }
+
+    if (3 == $int && 3 == $string) {
+        return 'shared';
+    }
+
+    return 'unknown(' . $int . ',' . $string . ')';
+}
+
+function report(int $checksum, float $loopSeconds, string $statics, null|float $firstPassSeconds = null): void {
+    write_line!('checksum=' . $checksum);
+    write_line!('loop=' . $loopSeconds);
+    if ($firstPassSeconds != null) {
+        write_line!('first=' . $firstPassSeconds);
+    }
+
+    write_line!('memory=unknown');
+    write_line!('statics=' . $statics);
+}

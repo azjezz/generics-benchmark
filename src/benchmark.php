@@ -17,20 +17,42 @@ const DEFAULT_ITERATIONS = 20;
 const DEFAULT_WARMUP_ITERATIONS = 1;
 
 /**
- * @var array<string, array{directory: string, description: string}>
+ * @var array<string, array{directory: string, description: string, language: string}>
  */
 const IMPLEMENTATIONS = [
     'phpdoc' => [
         'directory' => 'phpdoc-impl',
         'description' => 'Userland generics via PHPDoc annotations (runs on a stock binary)',
+        'language' => 'php',
     ],
     'reified' => [
         'directory' => 'reified-generics-impl',
         'description' => 'Native reified generics, `Foo::<T>` turbofish, variance, generic functions',
+        'language' => 'php',
     ],
     'holly' => [
         'directory' => 'holly-generics-impl',
         'description' => 'Native generics, bare `Foo<T>` type arguments, no variance',
+        'language' => 'php',
+    ],
+    'elissa' => [
+        'directory' => 'elissa-impl',
+        'description' => 'Elissa: a separate language with reified generics, on its own runtime',
+        'language' => 'elissa',
+    ],
+];
+
+/**
+ * @var array<string, array{extension: string, modes: list<string>}>
+ */
+const LANGUAGES = [
+    'php' => [
+        'extension' => 'php',
+        'modes' => ['plain', 'jit'],
+    ],
+    'elissa' => [
+        'extension' => 'els',
+        'modes' => ['plain'],
     ],
 ];
 
@@ -39,11 +61,11 @@ const IMPLEMENTATIONS = [
  */
 const SCENARIOS = [
     'main' => [
-        'script' => 'run.php',
+        'script' => 'run',
         'description' => 'A loop in which every statement is a generic operation',
     ],
     'specialization' => [
-        'script' => 'specialization.php',
+        'script' => 'specialization',
         'description' => 'Many distinct specializations of the same generic classes',
     ],
 ];
@@ -112,8 +134,8 @@ function usage(): string
               jit              Opcache and JIT enabled.
 
         Options:
-              --binary=<path>            Binary to use for implementations without a specific one
-                                         (default: the binary running this script).
+              --binary=<path>            Binary to use for PHP implementations without a specific
+                                         one (default: the binary running this script).
         {$binaryOptions}      --baseline=<name>          Implementation the others are compared against, and
                                          whose answer is taken as correct (default: the first one
                                          benchmarked).
@@ -174,7 +196,7 @@ function execute(string $binary, array $arguments, string $script): array
 }
 
 /**
- * @return array{checksum: string, loop: float, memory: int, statics: string}|null
+ * @return array{checksum: string, loop: float, memory: string, statics: string}|null
  */
 function measurements(string $output): ?array
 {
@@ -195,7 +217,7 @@ function measurements(string $output): ?array
     return [
         'checksum' => $values['checksum'],
         'loop' => (float) $values['loop'],
-        'memory' => (int) $values['memory'],
+        'memory' => $values['memory'],
         'statics' => $values['statics'],
     ];
 }
@@ -252,9 +274,13 @@ function seconds(float $value): string
     return number_format($value, 6) . 's';
 }
 
-function bytes(int $value): string
+function bytes(string $value): string
 {
-    return number_format($value / 1048576, 2) . ' MB';
+    if (!ctype_digit($value)) {
+        return $value;
+    }
+
+    return number_format((int) $value / 1048576, 2) . ' MB';
 }
 
 /**
@@ -299,9 +325,14 @@ if (isset($options['help'])) {
 }
 
 if (isset($options['list'])) {
-    $rows = [['NAME', 'DIRECTORY', 'DESCRIPTION']];
+    $rows = [['NAME', 'LANGUAGE', 'DIRECTORY', 'DESCRIPTION']];
     foreach (IMPLEMENTATIONS as $name => $implementation) {
-        $rows[] = [$name, $implementation['directory'], $implementation['description']];
+        $rows[] = [
+            $name,
+            $implementation['language'],
+            $implementation['directory'],
+            $implementation['description'],
+        ];
     }
 
     echo table($rows);
@@ -389,24 +420,69 @@ if ($warmupIterations < 0) {
 $defaultBinary = $options['binary'] ?? PHP_BINARY;
 
 $binaries = [];
+$runnable = [];
 foreach ($selected as $name) {
-    $binaries[$name] = $options[$name . '-binary'] ?? $defaultBinary;
+    $binary = $options[$name . '-binary'] ?? null;
+    if (null === $binary && 'php' === IMPLEMENTATIONS[$name]['language']) {
+        $binary = $defaultBinary;
+    }
+
+    if (null === $binary) {
+        progress(sprintf('Skipping %s: it needs its own binary (pass --%s-binary=<path>).', $name, $name));
+
+        continue;
+    }
+
+    $binaries[$name] = $binary;
+    $runnable[] = $name;
+}
+
+$selected = $runnable;
+
+if ([] === $selected) {
+    fail('No implementation has a binary to run it.');
+}
+
+if (!in_array($baseline, $selected, true)) {
+    if (isset($options['baseline'])) {
+        fail(sprintf('The baseline `%s` has no binary to run it.', $baseline));
+    }
+
+    $baseline = $selected[0];
 }
 
 $results = [];
 foreach ($scenarios as $scenario) {
     foreach ($selected as $name) {
-        $script = __DIR__ . '/' . IMPLEMENTATIONS[$name]['directory'] . '/' . SCENARIOS[$scenario]['script'];
+        $language = LANGUAGES[IMPLEMENTATIONS[$name]['language']];
+
+        $script = sprintf(
+            '%s/%s/%s.%s',
+            __DIR__,
+            IMPLEMENTATIONS[$name]['directory'],
+            SCENARIOS[$scenario]['script'],
+            $language['extension'],
+        );
+
         if (!is_file($script)) {
-            fail(sprintf(
-                'The `%s` implementation is missing the `%s` scenario at %s.',
-                $name,
-                $scenario,
-                $script,
-            ));
+            progress(sprintf('Skipping %s/%s: the implementation has no such scenario.', $scenario, $name));
+
+            continue;
         }
 
         foreach ($modes as $mode) {
+            if (!in_array($mode, $language['modes'], true)) {
+                progress(sprintf(
+                    'Skipping %s/%s [%s]: the %s runtime has no such mode.',
+                    $scenario,
+                    $name,
+                    $mode,
+                    IMPLEMENTATIONS[$name]['language'],
+                ));
+
+                continue;
+            }
+
             $binary = $binaries[$name];
             $arguments = MODES[$mode];
 

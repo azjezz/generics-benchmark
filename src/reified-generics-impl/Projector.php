@@ -1,0 +1,21 @@
+<?php
+
+declare(strict_types=1);
+
+namespace GenericsBenchmark\ReifiedImpl;
+
+interface Projector<in I, out O> {
+    public function project(I $value): O;
+}
+
+final readonly class IntProjector implements Projector<int, int> {
+    public function project(int $value): int {
+        return ($value * 17 + 11) % 1000003;
+    }
+}
+
+final readonly class Doubler implements Projector<int, int> {
+    public function project(int $value): int {
+        return ($value * 2 + 1) % 1000003;
+    }
+}

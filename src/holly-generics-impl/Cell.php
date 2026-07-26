@@ -1,0 +1,19 @@
+<?php
+
+declare(strict_types=1);
+
+namespace GenericsBenchmark\HollyImpl;
+
+final readonly class Cell<T> extends Container<T> {
+    public function __construct(
+        private T $item,
+    ) {}
+
+    public function value(): T {
+        return $this->item;
+    }
+
+    public function map<U>(Projector<T, U> $projector): Cell<U> {
+        return new Cell<U>($projector->project($this->item));
+    }
+}

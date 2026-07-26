@@ -1,0 +1,29 @@
+<?php
+
+declare(strict_types=1);
+
+namespace GenericsBenchmark\ReifiedImpl;
+
+interface Scorer {
+    public function score(): int;
+}
+
+final readonly class Weight implements Scorer {
+    public function __construct(
+        private int $weight,
+    ) {}
+
+    public function score(): int {
+        return $this->weight;
+    }
+}
+
+final readonly class Scored<T : Scorer> {
+    public function __construct(
+        private T $subject,
+    ) {}
+
+    public function total(): int {
+        return $this->subject->score();
+    }
+}
